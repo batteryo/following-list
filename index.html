@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Full Following List</title>
+<meta name="description" content="Paste any X account to see everyone it follows, then open them one by one to follow.">
+<meta property="og:title" content="Full Following List">
+<meta property="og:description" content="Paste any X account to see everyone it follows, then open them one by one to follow.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&display=swap" media="print" onload="this.media='all'">
+<style>
+/* Layout: one reading column. The account form on top, a sticky tool strip, then the accounts as a ruled roll of names. */
+:root {
+  --paper: #f7f5f8;
+  --sheet: #ffffff;
+  --ink: #1d1720;
+  --ink-soft: #655c6b;
+  --rule: #e7e1ea;
+  --rule-strong: #cdc4d2;
+  --hover: #f2eef4;
+  --accent: #7b2d5f;        /* porphyry */
+  --on-accent: #ffffff;
+  --done: #1b7547;
+  --done-wash: #e3f2e9;
+  --warn: #874800;
+  --warn-wash: #fbf0df;
+  --visited: #6f5b7a;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --ui: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #131015;
+    --sheet: #1c181f;
+    --ink: #efe9f1;
+    --ink-soft: #a89eae;
+    --rule: #2e2833;
+    --rule-strong: #4a4251;
+    --hover: #231e27;
+    --accent: #e8a2cf;
+    --on-accent: #2a0d1f;
+    --done: #72d3a1;
+    --done-wash: #142419;
+    --warn: #efb466;
+    --warn-wash: #2b2010;
+    --visited: #c3b1cd;
+    color-scheme: dark;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 400 15px/1.45 var(--ui); }
+[hidden] { display: none !important; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+.wrap { max-width: 800px; margin-inline: auto; padding-inline: 16px; padding-block: clamp(28px, 6vw, 56px) 64px; }
+
+/* Masthead and the account form */
+.masthead { display: grid; gap: 12px; }
+h1 { margin: 0; font-family: var(--display); font-weight: 800; font-size: clamp(2.1rem, 1.5rem + 2.6vw, 3.1rem); line-height: 1; letter-spacing: -0.025em; text-wrap: balance; }
+.lede { margin: 0; max-width: 60ch; color: var(--ink-soft); font-size: 1.05rem; }
+.lookup { display: grid; gap: 6px; margin-top: 10px; }
+.field-label { font-size: .78rem; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); }
+.lookup-row { display: flex; gap: 8px; }
+#account { flex: 1 1 auto; min-width: 0; padding: 12px 14px; font-size: 1.05rem; background: var(--sheet); border: 1px solid var(--rule-strong); border-radius: 10px; }
+#account::placeholder, #filter::placeholder { color: var(--ink-soft); opacity: .85; }
+.btn { border: 1px solid transparent; border-radius: 10px; padding: 10px 16px; font-weight: 650; cursor: pointer; white-space: nowrap; }
+.btn-primary { background: var(--accent); color: var(--on-accent); }
+.btn-primary:hover { filter: brightness(1.1); }
+.btn-quiet { background: var(--sheet); border-color: var(--rule-strong); }
+.btn-quiet:hover { background: var(--hover); }
+.form-msg { margin: 0; color: var(--warn); }
+.example-row { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--ink-soft); font-size: .92rem; }
+.chip { border: 1px solid var(--rule-strong); background: transparent; border-radius: 999px; padding: 2px 10px; cursor: pointer; }
+.chip:hover { background: var(--hover); }
+
+/* The account being looked at, and how far its list has loaded */
+.result { margin-top: 32px; display: grid; gap: 14px; }
+.owner { display: flex; gap: 14px; align-items: center; min-width: 0; }
+.owner-av { width: 56px; height: 56px; flex: none; border-radius: 50%; background: var(--rule); object-fit: cover; }
+.owner-text { min-width: 0; }
+.owner-name { font-family: var(--display); font-weight: 700; font-size: 1.4rem; line-height: 1.15; overflow-wrap: anywhere; }
+.owner-meta { color: var(--ink-soft); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.owner-meta a { color: var(--accent); text-decoration: none; }
+.owner-meta a:hover { text-decoration: underline; }
+.status { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 14px; background: var(--sheet); border: 1px solid var(--rule); border-radius: 12px; }
+.status[data-tone="warn"] { background: var(--warn-wash); border-color: transparent; }
+.status[data-tone="done"] { background: var(--done-wash); border-color: transparent; }
+.status-text { flex: 1 1 240px; min-width: 0; font-variant-numeric: tabular-nums; }
+.status-main { font-weight: 600; }
+.status[data-tone="warn"] .status-main { color: var(--warn); }
+.status[data-tone="done"] .status-main { color: var(--done); }
+.status-note { display: block; color: var(--ink-soft); font-size: .92rem; }
+.bar { order: 3; flex: 1 0 100%; height: 6px; border-radius: 999px; background: var(--rule); overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--accent); transition: width .35s ease; }
+.bar.indeterminate i { width: 30%; animation: sweep 1.3s ease-in-out infinite; }
+@keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+
+/* Filter, order and counts stay on screen while scrolling the list */
+.tools { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding-block: 10px; background: var(--paper); border-bottom: 1px solid var(--rule); }
+#filter { flex: 1 1 220px; min-width: 0; padding: 9px 12px; background: var(--sheet); border: 1px solid var(--rule-strong); border-radius: 10px; }
+#sort { padding: 9px 10px; background: var(--sheet); border: 1px solid var(--rule-strong); border-radius: 10px; max-width: 100%; }
+.check { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; cursor: pointer; }
+.check input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.counts { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 2px 12px; color: var(--ink-soft); font-size: .9rem; font-variant-numeric: tabular-nums; }
+.linklike { padding: 0; border: 0; background: none; color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+
+/* The accounts, laid out like X's own list: picture, name, handle, the whole bio, a Follow button */
+.list { list-style: none; margin: 0; padding: 0; }
+.list li { border-bottom: 1px solid var(--rule); }
+.acct { position: relative; display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: start; gap: 12px; padding: 12px 10px; }
+.acct:hover { background: var(--hover); }
+.av { display: block; width: 48px; height: 48px; border-radius: 50%; background: var(--rule); object-fit: cover; }
+.who { min-width: 0; }
+.profile { display: flex; align-items: center; gap: 5px; min-width: 0; color: inherit; text-decoration: none; }
+.profile::after { content: ""; position: absolute; inset: 0; }  /* the whole row opens the profile */
+.profile:focus-visible { outline: none; }
+.acct:has(.profile:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
+.name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.profile:visited .name { color: var(--visited); }
+.badge { display: inline-flex; flex: none; width: 15px; height: 15px; color: var(--accent); }
+.badge.lock { color: var(--ink-soft); }
+.badge svg { width: 100%; height: 100%; }
+.badge .tick { fill: none; stroke: var(--sheet); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.handle-line { color: var(--ink-soft); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.bio { margin: 4px 0 0; white-space: pre-line; overflow-wrap: anywhere; }
+.follow { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 5px; padding: 7px 16px; border: 1px solid var(--rule-strong); border-radius: 999px; background: var(--sheet); color: var(--ink); font-weight: 700; text-decoration: none; white-space: nowrap; }
+.follow:hover { border-color: var(--accent); color: var(--accent); }
+.follow svg { width: 14px; height: 14px; }
+.follow .done { display: none; }
+.acct.opened .follow { border-color: transparent; background: var(--done-wash); color: var(--done); }
+.acct.opened .follow .todo { display: none; }
+.acct.opened .follow .done { display: inline-flex; align-items: center; gap: 5px; }
+.acct.opened .name { color: var(--ink-soft); }
+.empty { margin: 0; padding: 28px 0; text-align: center; color: var(--ink-soft); }
+.more { height: 1px; }
+
+/* How to use it */
+.foot { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--rule); display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px 28px; color: var(--ink-soft); font-size: .93rem; }
+.foot h2 { margin: 0 0 4px; font-size: .78rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink); }
+.foot p { margin: 0; max-width: 62ch; }
+
+@media (max-width: 640px) {
+  .tools { position: static; }  /* on a phone the strip would cover a third of the screen */
+}
+@media (prefers-reduced-motion: reduce) {
+  .bar i { transition: none; }
+  .bar.indeterminate i { width: 100%; opacity: .45; animation: none; }
+}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="masthead">
+    <h1>Full Following List</h1>
+    <p class="lede">X only shows part of a long following list. Paste any account to load all of it, then click through and follow the ones you want.</p>
+    <form id="lookup" class="lookup" novalidate>
+      <label class="field-label" for="account">X account</label>
+      <div class="lookup-row">
+        <input id="account" type="text" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="@handle or x.com/handle">
+        <button class="btn btn-primary" type="submit">Show list</button>
+      </div>
+      <p id="formMsg" class="form-msg" hidden></p>
+      <p class="example-row">Example: <button class="chip" type="button" data-handle="ByzantineSpirit">@ByzantineSpirit</button></p>
+    </form>
+    <noscript><p class="form-msg">This page needs JavaScript turned on to load the list.</p></noscript>
+  </header>
+
+  <section id="result" class="result" aria-label="Accounts" hidden>
+    <div id="owner" class="owner" hidden>
+      <img id="ownerAv" class="owner-av" alt="" width="56" height="56" referrerpolicy="no-referrer">
+      <div class="owner-text">
+        <div id="ownerName" class="owner-name"></div>
+        <div class="owner-meta"><a id="ownerLink" target="_blank" rel="noopener noreferrer"></a><span id="ownerCounts"></span></div>
+      </div>
+    </div>
+
+    <div id="status" class="status">
+      <div class="status-text"><span id="statusMain" class="status-main"></span><span id="statusNote" class="status-note"></span></div>
+      <button id="action" class="btn btn-quiet" type="button" hidden></button>
+      <div id="bar" class="bar" hidden><i></i></div>
+    </div>
+
+    <div id="tools" class="tools" hidden>
+      <label class="sr-only" for="filter">Filter the accounts</label>
+      <input id="filter" type="search" autocomplete="off" spellcheck="false" placeholder="Filter by name, handle or bio">
+      <label class="sr-only" for="sort">Order</label>
+      <select id="sort">
+        <option value="recent">Newest follows first</option>
+        <option value="oldest">Oldest follows first</option>
+        <option value="most">Most followers</option>
+        <option value="fewest">Fewest followers</option>
+        <option value="name">Name, A to Z</option>
+      </select>
+      <label class="check"><input id="hideOpened" type="checkbox"> Hide opened</label>
+      <div class="counts"><span id="count"></span><span id="openedCount"></span><button id="clearOpened" class="linklike" type="button" hidden>Clear check marks</button></div>
+    </div>
+
+    <ol id="list" class="list"></ol>
+    <p id="empty" class="empty" hidden>No accounts match that filter. <button id="clearFilter" class="linklike" type="button">Clear the filter</button></p>
+    <div id="more" class="more" aria-hidden="true"></div>
+  </section>
+  <p id="announce" class="sr-only" role="status" aria-live="polite"></p>
+
+  <footer class="foot">
+    <section>
+      <h2>Following them</h2>
+      <p>Press Follow to open that account on X with X's Follow prompt, or click anywhere else on the row to just open the profile. Both open in a new tab, and a middle-click opens them in the background, so you can line up a batch. Opened accounts get a check mark, and this browser remembers them.</p>
+    </section>
+    <section>
+      <h2>Where the list comes from</h2>
+      <p>The page asks FxTwitter, a free public service that reads X, for the account and its list, and loads profile pictures from X. It needs no login. Long lists take a while, roughly a minute for every 3,000 accounts.</p>
+    </section>
+  </footer>
+</main>
+
+<script>
+(() => {
+  'use strict';
+
+  const FX = 'https://api.fxtwitter.com/2';  // FxTwitter: account search, profiles and following lists
+  const FIRST_ROWS = 2000;                   // rows drawn at once; longer lists draw more on scroll
+  const MORE_ROWS = 1000;
+  const RETRY_WAITS = [800, 2500, 6000, 12000];
+  const OPENED_KEY = 'full-following-list:opened';
+  const RESERVED = new Set(['home', 'explore', 'search', 'i', 'settings', 'messages', 'notifications', 'compose',
+    'intent', 'hashtag', 'share', 'login', 'signup', 'tos', 'privacy', 'jobs', 'about', 'help']);
+  const X_HOSTS = /(^|\.)(x|twitter|fxtwitter|fixupx|vxtwitter|fixvx|xcancel)\.com$|(^|\.)nitter\./i;
+  const VERIFIED = { individual: 'Verified', business: 'Verified organization', government: 'Verified government account' };
+
+  const byId = id => document.getElementById(id);
+  const ui = {
+    form: byId('lookup'), input: byId('account'), formMsg: byId('formMsg'), result: byId('result'),
+    owner: byId('owner'), ownerAv: byId('ownerAv'), ownerName: byId('ownerName'), ownerLink: byId('ownerLink'), ownerCounts: byId('ownerCounts'),
+    status: byId('status'), statusMain: byId('statusMain'), statusNote: byId('statusNote'), action: byId('action'), bar: byId('bar'),
+    tools: byId('tools'), filter: byId('filter'), sort: byId('sort'), hideOpened: byId('hideOpened'),
+    count: byId('count'), openedCount: byId('openedCount'), clearOpened: byId('clearOpened'),
+    list: byId('list'), empty: byId('empty'), clearFilter: byId('clearFilter'), more: byId('more'), announce: byId('announce'),
+  };
+
+  const numberFormat = new Intl.NumberFormat();
+  const num = n => numberFormat.format(n);
+  const compact = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 });
+  const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+  const plural = (n, one, many = one + 's') => (n === 1 ? one : many);
+  // Accent- and case-blind text for the filter, so "αγια σοφια" finds "Ἁγία Σοφία".
+  const fold = s => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/ς/g, 'σ');
+
+  const SORTS = {
+    recent: null,  // the order X gives: newest follows first
+    oldest: (a, b) => b.i - a.i,
+    most: (a, b) => b.followers - a.followers || a.i - b.i,
+    fewest: (a, b) => a.followers - b.followers || a.i - b.i,
+    name: (a, b) => collator.compare(a.name, b.name) || a.i - b.i,
+  };
+
+  const ICONS = {
+    verified: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7.2" fill="currentColor"/><path class="tick" d="M4.9 8.3l2 2 4.3-4.5"/></svg>',
+    lock: '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3.4" y="7" width="9.2" height="7" rx="1.6" fill="currentColor"/><path d="M5.4 7V5.4a2.6 2.6 0 0 1 5.2 0V7" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
+    check: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.4l3 3 6-6.6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  };
+
+  // --- Accounts already opened, remembered in this browser -------------------------------------
+
+  let opened = new Set();
+  try { opened = new Set(JSON.parse(localStorage.getItem(OPENED_KEY) || '[]')); } catch { /* storage unavailable */ }
+  function saveOpened() {
+    try { localStorage.setItem(OPENED_KEY, JSON.stringify([...opened])); } catch { /* storage unavailable */ }
+  }
+
+  // --- Reading what was pasted ------------------------------------------------------------------
+
+  // "@name", "name", "x.com/name", "https://twitter.com/name/following", a post link... -> "name"
+  function parseAccount(text) {
+    let s = String(text || '').trim().replace(/^<|>$/g, '');
+    const bare = s.match(/^@?(\w{1,15})(?:[/?#]|$)/);
+    if (bare) return RESERVED.has(bare[1].toLowerCase()) ? null : bare[1];
+    if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) s = 'https://' + s;
+    let url;
+    try { url = new URL(s); } catch { return null; }
+    if (!X_HOSTS.test(url.hostname)) return null;
+    const first = url.pathname.split('/').filter(Boolean)[0] || '';
+    if (/^\w{1,15}$/.test(first) && !RESERVED.has(first.toLowerCase())) return first;
+    const named = url.searchParams.get('screen_name');  // x.com/intent/user?screen_name=name
+    return named && /^\w{1,15}$/.test(named) ? named : null;
+  }
+
+  // --- Talking to the services ------------------------------------------------------------------
+
+  class ServiceError extends Error {
+    constructor(status, message) { super(message); this.status = status; }
+  }
+
+  function sleep(ms, signal) {
+    return new Promise((resolve, reject) => {
+      if (signal.aborted) return reject(signal.reason);
+      const timer = setTimeout(resolve, ms);
+      signal.addEventListener('abort', () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
+    });
+  }
+
+  async function getJson(url, signal) {
+    let response, text;
+    try {
+      response = await fetch(url, { signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
+      text = await response.text();
+    } catch (e) {
+      if (signal.aborted) throw e;
+      throw new ServiceError(0, 'no answer');
+    }
+    let data = null;
+    try { data = JSON.parse(text); } catch { /* not JSON: blocked or down */ }
+    return { status: response.status, text, data };
+  }
+
+  function avatarUrl(url, size = '_bigger') {
+    const s = String(url || '');
+    return /^https:\/\/(pbs|abs)\.twimg\.com\//.test(s) ? s.replace(/_normal(\.\w+)?$/, size + '$1') : '';
+  }
+
+  // `who` is a handle or "id:<number>". Lookups by handle fail at random (about half the time in
+  // testing); lookups by id don't.
+  async function profile(who, signal) {
+    const path = who.startsWith('id:') ? who : encodeURIComponent(who);
+    const { status, data } = await getJson(`${FX}/profile/${path}`, signal);
+    const code = data?.code ?? status;
+    const u = data?.user;
+    if (code === 200 && u?.id && u.screen_name) {
+      return { id: String(u.id), handle: u.screen_name, name: u.name, avatar: u.avatar_url,
+               following: u.following, followers: u.followers, locked: !!u.protected };
+    }
+    throw new ServiceError(code, data?.message || `HTTP ${code}`);
+  }
+
+  // Account search finds the id reliably, but its follower and following counts are always 0.
+  async function searchAccount(handle, signal) {
+    const { status, data } = await getJson(`${FX}/typeahead?q=${encodeURIComponent(handle)}&result_type=users`, signal);
+    if ((data?.code ?? status) !== 200 || !Array.isArray(data?.users)) throw new ServiceError(status, 'search failed');
+    const u = data.users.find(u => String(u?.screen_name).toLowerCase() === handle.toLowerCase());
+    return u?.id ? { id: String(u.id), handle: u.screen_name, name: u.name, avatar: u.avatar_url,
+                     following: null, followers: null, locked: !!u.protected } : null;
+  }
+
+  const settle = p => p.then(value => ({ ok: true, value }), reason => ({ ok: false, reason }));
+
+  async function lookUp(handle, signal) {
+    const direct = settle(profile(handle, signal));
+    const found = await settle(searchAccount(handle, signal));
+    if (signal.aborted) throw signal.reason;
+    if (found.ok && found.value) {
+      const byId = await settle(profile('id:' + found.value.id, signal));
+      if (byId.ok) return byId.value;
+      if (signal.aborted) throw signal.reason;
+      const named = await direct;
+      return named.ok ? named.value : found.value;  // without a profile the list still loads; only the counts are missing
+    }
+    // Search can miss brand-new accounts, so ask for the profile a few more times before giving up.
+    const answers = await Promise.all([direct, settle(profile(handle, signal)), settle(profile(handle, signal)), settle(profile(handle, signal))]);
+    if (signal.aborted) throw signal.reason;
+    const hit = answers.find(a => a.ok);
+    if (hit) return hit.value;
+    const missing = found.ok && answers.every(a => a.reason?.status === 404);
+    throw new ServiceError(missing ? 404 : 0, 'lookup failed');
+  }
+
+  async function followingPage(id, cursor, signal) {
+    const query = new URLSearchParams({ count: '100' });
+    if (cursor) query.set('cursor', cursor);
+    const { status, data } = await getJson(`${FX}/profile/id:${id}/following?${query}`, signal);
+    const code = data?.code ?? status;
+    if (code !== 200 || !Array.isArray(data?.results)) throw new ServiceError(code, data?.message || `HTTP ${code}`);
+    return { users: data.results, next: data.cursor?.bottom || null };
+  }
+
+  async function followingPageWithRetries(id, cursor, signal) {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await followingPage(id, cursor, signal);
+      } catch (e) {
+        if (signal.aborted || attempt === RETRY_WAITS.length || [400, 401, 403].includes(e.status)) throw e;
+        await sleep(RETRY_WAITS[attempt], signal);
+      }
+    }
+  }
+
+  // --- Loading an account's list ----------------------------------------------------------------
+
+  let current = null;  // { query, owner, accounts, seen, cursor, phase, ctrl, rate }
+
+  function toAccount(u, i) {
+    const handle = String(u.screen_name);
+    const name = String(u.name || handle);
+    const bio = String(u.description || '');
+    const v = u.verification || {};
+    return {
+      id: String(u.id), i, handle, name, bio,
+      linkable: /^\w{1,15}$/.test(handle),
+      avatar: avatarUrl(u.avatar_url),
+      followers: Number(u.followers) || 0,
+      verified: v.verified ? (VERIFIED[v.type] || 'Verified') : '',
+      locked: !!u.protected,
+      hay: fold(`${handle} ${name} ${bio}`),
+      node: null,
+    };
+  }
+
+  async function show(handle, force = false) {
+    const same = current && current.query.toLowerCase() === handle.toLowerCase();
+    if (same && !force && !['missing', 'unreachable'].includes(current.phase)) return;
+    current?.ctrl.abort();
+    const run = current = { query: handle, owner: null, accounts: [], seen: new Set(), cursor: null,
+                            phase: 'lookup', ctrl: new AbortController(), rate: null };
+    resetView();
+    updateStatus(run);
+    try {
+      run.owner = await lookUp(handle, run.ctrl.signal);
+    } catch (e) {
+      if (run !== current) return;
+      run.phase = e.status === 404 ? 'missing' : 'unreachable';
+      updateStatus(run);
+      return;
+    }
+    if (run !== current) return;
+    renderOwner(run.owner);
+    history.replaceState(null, '', '#' + run.owner.handle);
+    if (run.owner.locked) {
+      run.phase = 'protected';
+      updateStatus(run);
+      return;
+    }
+    loadMore(run);
+  }
+
+  async function loadMore(run) {
+    if (run !== current || !run.owner || run.phase === 'loading' || run.phase === 'done') return;
+    const ctrl = run.ctrl = new AbortController();
+    run.phase = 'loading';
+    run.rate = { at: performance.now(), count: run.accounts.length };
+    updateStatus(run);
+    try {
+      for (;;) {
+        const { users, next } = await followingPageWithRetries(run.owner.id, run.cursor, ctrl.signal);
+        if (run !== current) return;
+        for (const u of users) {
+          const id = u && u.id != null ? String(u.id) : '';
+          if (!id || !u.screen_name || run.seen.has(id)) continue;
+          run.seen.add(id);
+          run.accounts.push(toAccount(u, run.accounts.length));
+        }
+        run.cursor = next;
+        if (!next || !users.length) {
+          run.phase = 'done';
+          break;
+        }
+        refreshList(false);
+        updateStatus(run);
+      }
+    } catch (e) {
+      if (run !== current) return;
+      run.phase = ctrl.signal.aborted ? 'stopped' : 'error';
+    }
+    refreshList(false);
+    updateStatus(run);
+  }
+
+  // --- Drawing ----------------------------------------------------------------------------------
+
+  function make(tag, className, text) {
+    const el = document.createElement(tag);
+    if (className) el.className = className;
+    if (text != null) el.textContent = text;
+    return el;
+  }
+
+  function icon(name, className, label) {
+    const el = make('span', className);
+    el.innerHTML = ICONS[name];  // fixed markup from ICONS, never account data
+    if (label) {
+      el.title = label;
+      el.setAttribute('role', 'img');
+      el.setAttribute('aria-label', label);
+    }
+    return el;
+  }
+
+  function renderOwner(o) {
+    const avatar = avatarUrl(o.avatar, '_200x200');
+    if (avatar) ui.ownerAv.src = avatar; else ui.ownerAv.removeAttribute('src');
+    ui.ownerName.textContent = o.name || '@' + o.handle;
+    ui.ownerLink.textContent = '@' + o.handle;
+    ui.ownerLink.href = `https://x.com/${encodeURIComponent(o.handle)}`;
+    const counts = [];
+    if (typeof o.following === 'number') counts.push(`follows ${num(o.following)}`);
+    if (typeof o.followers === 'number') counts.push(`${num(o.followers)} ${plural(o.followers, 'follower')}`);
+    ui.ownerCounts.textContent = counts.length ? ' · ' + counts.join(' · ') : '';
+    ui.owner.hidden = false;
+    document.title = `@${o.handle} follows · Full Following List`;
+  }
+
+  function eta(run) {
+    const total = run.owner?.following;
+    const n = run.accounts.length;
+    if (!total || n >= total || !run.rate) return '';
+    const elapsed = performance.now() - run.rate.at;
+    const got = n - run.rate.count;
+    if (elapsed < 3000 || got <= 0) return '';
+    const seconds = (total - n) / (got / elapsed) / 1000;
+    if (seconds < 20) return '';
+    return seconds < 90 ? `About ${Math.ceil(seconds / 10) * 10} seconds left.` : `About ${Math.round(seconds / 60)} minutes left.`;
+  }
+
+  let lastPhase = null;
+  function updateStatus(run) {
+    const total = run.owner?.following;
+    const n = run.accounts.length;
+    const of = typeof total === 'number' && total >= n ? ` of ${num(total)}` : '';
+    const who = '@' + (run.owner?.handle || run.query);
+    let main = '', note = '', action = '', tone = '', bar = null;  // bar: null hidden, -1 unknown, else 0..1
+    switch (run.phase) {
+      case 'lookup':
+        main = `Looking up ${who}…`;
+        bar = -1;
+        break;
+      case 'missing':
+        tone = 'warn';
+        main = `No X account called ${who} was found.`;
+        note = 'Check the spelling. Suspended accounts can’t be shown either.';
+        break;
+      case 'unreachable':
+        tone = 'warn';
+        main = `Couldn’t look up ${who}.`;
+        note = 'The services this page reads from didn’t answer. Try again in a minute.';
+        action = 'Try again';
+        break;
+      case 'protected':
+        tone = 'warn';
+        main = `${who} is a protected account, so who it follows is private.`;
+        break;
+      case 'loading':
+        main = `Loading ${num(n)}${of}…`;
+        note = eta(run);
+        action = 'Stop';
+        bar = total ? Math.min(n / total, 1) : -1;
+        break;
+      case 'stopped':
+        main = `Stopped at ${num(n)}${of}.`;
+        action = 'Keep loading';
+        bar = total ? Math.min(n / total, 1) : null;
+        break;
+      case 'error':
+        tone = 'warn';
+        main = n ? `Loading paused at ${num(n)}${of}.` : `Couldn’t load who ${who} follows.`;
+        note = 'The list service didn’t answer. It usually works again within a minute.';
+        action = n ? 'Keep loading' : 'Try again';
+        break;
+      case 'done':
+        tone = 'done';
+        main = n ? `All ${num(n)} ${plural(n, 'account')} loaded.` : `${who} doesn’t follow anyone.`;
+        if (total > n) {
+          const gap = total - n;
+          note = `X counts ${num(total)}. The other ${num(gap)} ${plural(gap, 'is an account', 'are accounts')} X no longer shows, usually suspended or deleted.`;
+        }
+        break;
+    }
+    ui.status.dataset.tone = tone;
+    ui.statusMain.textContent = main;
+    ui.statusNote.textContent = note;
+    ui.statusNote.hidden = !note;
+    ui.action.textContent = action;
+    ui.action.hidden = !action;
+    ui.bar.hidden = bar === null;
+    ui.bar.classList.toggle('indeterminate', bar === -1);
+    if (bar !== null && bar !== -1) ui.bar.firstElementChild.style.width = (bar * 100).toFixed(1) + '%';
+    else ui.bar.firstElementChild.style.width = '';
+    if (run.phase !== lastPhase) {  // tell screen readers about changes of state, not every page
+      lastPhase = run.phase;
+      ui.announce.textContent = [main, note].filter(Boolean).join(' ');
+    }
+  }
+
+  function newTab(link, href) {
+    link.href = href;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+  }
+
+  function rowFor(a) {
+    if (a.node) return a.node;
+    const li = make('li');
+    const row = make('div', 'acct' + (opened.has(a.id) ? ' opened' : ''));
+    row.dataset.id = a.id;
+
+    const img = make('img', 'av');
+    img.alt = '';
+    img.width = 48;
+    img.height = 48;
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.referrerPolicy = 'no-referrer';
+    if (a.avatar) img.src = a.avatar;
+
+    const who = make('div', 'who');
+    const top = make(a.linkable ? 'a' : 'div', 'profile');
+    if (a.linkable) newTab(top, `https://x.com/${a.handle}`);
+    top.append(make('span', 'name', a.name));
+    if (a.verified) top.append(icon('verified', 'badge', a.verified));
+    if (a.locked) top.append(icon('lock', 'badge lock', 'Protected account'));
+    who.append(top, make('div', 'handle-line', `@${a.handle} · ${compact.format(a.followers)} ${plural(a.followers, 'follower')}`));
+    if (a.bio) who.append(make('p', 'bio', a.bio));
+    row.append(img, who);
+
+    if (a.linkable) {  // X's follow link: opens the profile with X's own Follow prompt
+      const follow = make('a', 'follow');
+      newTab(follow, `https://x.com/intent/follow?screen_name=${a.handle}`);
+      follow.setAttribute('aria-label', `Follow @${a.handle} on X`);
+      const done = make('span', 'done');
+      done.append(icon('check', ''), make('span', null, 'Opened'));
+      follow.append(make('span', 'todo', 'Follow'), done);
+      row.append(follow);
+    }
+    li.append(row);
+    a.node = li;
+    return li;
+  }
+
+  let shown = FIRST_ROWS;     // how many matching rows are on the page
+  let rendered = [];          // the accounts drawn, in order
+  let matchCount = 0;
+  let hiddenOpened = new Set();  // "Hide opened" hides what was opened when it was last applied, so rows don't vanish mid-click
+
+  function matching() {
+    const terms = fold(ui.filter.value).split(/\s+/).map(t => t.replace(/^@/, '')).filter(Boolean);
+    const hide = ui.hideOpened.checked;
+    const view = (current ? current.accounts : [])
+      .filter(a => !(hide && hiddenOpened.has(a.id)) && terms.every(t => a.hay.includes(t)));
+    const sort = SORTS[ui.sort.value];
+    return sort ? view.sort(sort) : view;
+  }
+
+  function refreshList(reset) {
+    if (reset) {
+      shown = FIRST_ROWS;
+      hiddenOpened = new Set(opened);
+    }
+    const view = matching();
+    const want = view.slice(0, shown);
+    const extends_ = rendered.length <= want.length && rendered.every((a, i) => a === want[i]);
+    const rows = document.createDocumentFragment();
+    for (const a of extends_ ? want.slice(rendered.length) : want) rows.append(rowFor(a));
+    if (extends_) ui.list.append(rows); else ui.list.replaceChildren(rows);
+    rendered = want;
+    matchCount = view.length;
+    const total = current ? current.accounts.length : 0;
+    ui.tools.hidden = total === 0;
+    ui.empty.hidden = !(total && matchCount === 0);
+    updateCounts();
+    queueFill();
+  }
+
+  function updateCounts() {
+    const accounts = current ? current.accounts : [];
+    const total = accounts.length;
+    const narrowed = matchCount !== total;
+    ui.count.textContent = narrowed ? `${num(matchCount)} of ${num(total)} shown` : `${num(total)} ${plural(total, 'account')}`;
+    const openedHere = accounts.reduce((k, a) => k + (opened.has(a.id) ? 1 : 0), 0);
+    ui.openedCount.textContent = openedHere ? `${num(openedHere)} opened` : '';
+    ui.clearOpened.hidden = !openedHere;
+  }
+
+  let fillQueued = false;
+  function queueFill() {
+    if (fillQueued) return;
+    fillQueued = true;
+    requestAnimationFrame(() => {
+      fillQueued = false;
+      if (matchCount > shown && ui.more.getBoundingClientRect().top < innerHeight * 2 + 600) {
+        shown += MORE_ROWS;
+        refreshList(false);
+      }
+    });
+  }
+
+  function resetView() {
+    ui.result.hidden = false;
+    ui.owner.hidden = true;
+    ui.tools.hidden = true;
+    ui.empty.hidden = true;
+    ui.filter.value = '';
+    ui.list.replaceChildren();
+    rendered = [];
+    matchCount = 0;
+    shown = FIRST_ROWS;
+    hiddenOpened = new Set(opened);
+    document.title = 'Full Following List';
+  }
+
+  // --- Wiring -----------------------------------------------------------------------------------
+
+  function go(text, typed) {
+    const handle = parseAccount(text);
+    if (!handle) {
+      if (typed) {
+        ui.formMsg.textContent = 'That doesn’t look like an X account. Paste a handle like @nasa or a link like x.com/nasa.';
+        ui.formMsg.hidden = false;
+      }
+      return;
+    }
+    ui.formMsg.hidden = true;
+    show(handle);
+  }
+
+  ui.form.addEventListener('submit', e => {
+    e.preventDefault();
+    go(ui.input.value, true);
+  });
+  ui.input.addEventListener('paste', () => setTimeout(() => go(ui.input.value, false), 0));
+  document.querySelector('.chip[data-handle]').addEventListener('click', e => {
+    ui.input.value = '@' + e.currentTarget.dataset.handle;
+    go(ui.input.value, true);
+  });
+
+  ui.action.addEventListener('click', () => {
+    const run = current;
+    if (!run) return;
+    if (run.phase === 'loading') run.ctrl.abort();
+    else if (run.phase === 'unreachable') show(run.query, true);
+    else if (run.phase === 'stopped' || run.phase === 'error') loadMore(run);
+  });
+
+  let filterTimer = 0;
+  ui.filter.addEventListener('input', () => {
+    clearTimeout(filterTimer);
+    filterTimer = setTimeout(() => refreshList(true), (current?.accounts.length || 0) > 3000 ? 150 : 0);
+  });
+  ui.sort.addEventListener('change', () => refreshList(true));
+  ui.hideOpened.addEventListener('change', () => refreshList(true));
+  ui.clearFilter.addEventListener('click', () => {
+    ui.filter.value = '';
+    refreshList(true);
+    ui.filter.focus();
+  });
+
+  function markOpened(e) {
+    if (e.type === 'auxclick' && e.button !== 1) return;
+    const row = e.target.closest('a')?.closest('.acct');
+    if (!row) return;
+    row.classList.add('opened');
+    if (!opened.has(row.dataset.id)) {
+      opened.add(row.dataset.id);
+      saveOpened();
+      updateCounts();
+    }
+  }
+  ui.list.addEventListener('click', markOpened);
+  ui.list.addEventListener('auxclick', markOpened);
+
+  ui.clearOpened.addEventListener('click', () => {
+    const accounts = current ? current.accounts : [];
+    const marked = accounts.filter(a => opened.has(a.id));
+    if (!marked.length || !confirm(`Remove the check marks from ${num(marked.length)} opened ${plural(marked.length, 'account')}?`)) return;
+    for (const a of marked) {
+      opened.delete(a.id);
+      a.node?.firstElementChild.classList.remove('opened');
+    }
+    saveOpened();
+    refreshList(true);
+  });
+
+  addEventListener('scroll', queueFill, { passive: true });
+  addEventListener('resize', queueFill);
+  addEventListener('keydown', e => {
+    if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName || '')) return;
+    e.preventDefault();
+    (ui.tools.hidden ? ui.input : ui.filter).focus();
+  });
+
+  // A link ending in #name opens that account's list straight away.
+  function fromHash() {
+    let text = '';
+    try { text = decodeURIComponent(location.hash.slice(1)); } catch { return; }
+    const handle = parseAccount(text);
+    if (handle) {
+      ui.input.value = '@' + handle;
+      show(handle);
+    }
+  }
+  addEventListener('hashchange', fromHash);
+  fromHash();
+})();
+</script>
+</body>
+</html>
