@@ -138,6 +138,9 @@ h1 { margin: 0; font-family: var(--display); font-weight: 800; font-size: clamp(
 .acct.opened .follow .todo { display: none; }
 .acct.opened .follow .done { display: inline-flex; align-items: center; gap: 5px; }
 .acct.opened .name { color: var(--ink-soft); }
+.list li.undated-head { padding: 28px 10px 10px; border-bottom-color: var(--rule-strong); }
+.undated-head strong { display: block; font-size: .78rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.undated-head span { display: block; max-width: 62ch; margin-top: 2px; color: var(--ink-soft); font-size: .92rem; }
 .empty { margin: 0; padding: 28px 0; text-align: center; color: var(--ink-soft); }
 .more { height: 1px; }
 
@@ -215,7 +218,7 @@ h1 { margin: 0; font-family: var(--display); font-weight: 800; font-size: clamp(
     </section>
     <section>
       <h2>Where the list comes from</h2>
-      <p>The page asks FxTwitter, a free public service that reads X, for the account and its list, and loads profile pictures from X. It needs no login. Long lists take a while, roughly a minute for every 3,000 accounts.</p>
+      <p>The page asks FxTwitter, a free public service that reads X, for the account and its list, and loads profile pictures from X. It needs no login. Long lists take a while, roughly a minute for every 3,000 accounts. X gives the list newest follow first, except for up to 20 accounts it puts at the top with no follow date. Those come last here.</p>
     </section>
   </footer>
 </main>
@@ -228,6 +231,11 @@ h1 { margin: 0; font-family: var(--display); font-weight: 800; font-size: clamp(
   const FIRST_ROWS = 2000;                   // rows drawn at once; longer lists draw more on scroll
   const MORE_ROWS = 1000;
   const RETRY_WAITS = [800, 2500, 6000, 12000];
+  // X starts a following list with up to 20 accounts that sit outside its date order and carry no follow date
+  // (the ones checked were followed years earlier), then lists the rest newest follow first. A list cursor is
+  // "<position>|<n>", and positions below 2^62 are follow times (Unix ms × 2^20), so this cursor asks for the
+  // list from its newest dated follow, which shows where X's undated accounts end.
+  const NEWEST_DATED = '4611686018427387903|0';
   const OPENED_KEY = 'full-following-list:opened';
   const RESERVED = new Set(['home', 'explore', 'search', 'i', 'settings', 'messages', 'notifications', 'compose',
     'intent', 'hashtag', 'share', 'login', 'signup', 'tos', 'privacy', 'jobs', 'about', 'help']);
@@ -252,13 +260,15 @@ h1 { margin: 0; font-family: var(--display); font-weight: 800; font-size: clamp(
   // Accent- and case-blind text for the filter, so "αγια σοφια" finds "Ἁγία Σοφία".
   const fold = s => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/ς/g, 'σ');
 
+  // X gives the dated follows newest first; the accounts it has no follow date for go last in both date orders.
   const SORTS = {
-    recent: null,  // the order X gives: newest follows first
-    oldest: (a, b) => b.i - a.i,
+    recent: (a, b) => a.undated - b.undated || a.i - b.i,
+    oldest: (a, b) => a.undated - b.undated || (a.undated ? a.i - b.i : b.i - a.i),
     most: (a, b) => b.followers - a.followers || a.i - b.i,
     fewest: (a, b) => a.followers - b.followers || a.i - b.i,
     name: (a, b) => collator.compare(a.name, b.name) || a.i - b.i,
   };
+  const DATE_ORDERS = new Set(['recent', 'oldest']);
 
   const ICONS = {
     verified: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7.2" fill="currentColor"/><path class="tick" d="M4.9 8.3l2 2 4.3-4.5"/></svg>',
@@ -378,14 +388,25 @@ h1 { margin: 0; font-family: var(--display); font-weight: 800; font-size: clamp(
     return { users: data.results, next: data.cursor?.bottom || null };
   }
 
-  async function followingPageWithRetries(id, cursor, signal) {
+  async function followingPageWithRetries(id, cursor, signal, waits = RETRY_WAITS) {
     for (let attempt = 0; ; attempt++) {
       try {
         return await followingPage(id, cursor, signal);
       } catch (e) {
-        if (signal.aborted || attempt === RETRY_WAITS.length || [400, 401, 403].includes(e.status)) throw e;
-        await sleep(RETRY_WAITS[attempt], signal);
+        if (signal.aborted || attempt === waits.length || [400, 401, 403].includes(e.status)) throw e;
+        await sleep(waits[attempt], signal);
       }
+    }
+  }
+
+  // The id of the newest follow X has a date for, or '' if that can't be found out.
+  async function newestDatedId(id, signal) {
+    try {
+      const { users } = await followingPageWithRetries(id, NEWEST_DATED, signal, RETRY_WAITS.slice(0, 2));
+      return users[0]?.id != null ? String(users[0].id) : '';
+    } catch (e) {
+      if (signal.aborted) throw e;
+      return '';
     }
   }
 
@@ -393,13 +414,13 @@ h1 { margin: 0; font-family: var(--display); font-weight: 800; font-size: clamp(
 
   let current = null;  // { query, owner, accounts, seen, cursor, phase, ctrl, rate }
 
-  function toAccount(u, i) {
+  function toAccount(u, i, undated) {
     const handle = String(u.screen_name);
     const name = String(u.name || handle);
     const bio = String(u.description || '');
     const v = u.verification || {};
     return {
-      id: String(u.id), i, handle, name, bio,
+      id: String(u.id), i, undated, handle, name, bio,
       linkable: /^\w{1,15}$/.test(handle),
       avatar: avatarUrl(u.avatar_url),
       followers: Number(u.followers) || 0,
@@ -445,13 +466,19 @@ h1 { margin: 0; font-family: var(--display); font-weight: 800; font-size: clamp(
     updateStatus(run);
     try {
       for (;;) {
-        const { users, next } = await followingPageWithRetries(run.owner.id, run.cursor, ctrl.signal);
+        const first = !run.cursor;
+        const [{ users, next }, newest] = await Promise.all([
+          followingPageWithRetries(run.owner.id, run.cursor, ctrl.signal),
+          first ? newestDatedId(run.owner.id, ctrl.signal) : '',
+        ]);
         if (run !== current) return;
-        for (const u of users) {
+        // On the first page, the accounts ahead of the newest dated follow are the ones X has no date for.
+        const undated = newest ? Math.max(0, users.findIndex(u => String(u?.id) === newest)) : 0;
+        for (const [k, u] of users.entries()) {
           const id = u && u.id != null ? String(u.id) : '';
           if (!id || !u.screen_name || run.seen.has(id)) continue;
           run.seen.add(id);
-          run.accounts.push(toAccount(u, run.accounts.length));
+          run.accounts.push(toAccount(u, run.accounts.length, k < undated));
         }
         run.cursor = next;
         if (!next || !users.length) {
@@ -629,8 +656,13 @@ h1 { margin: 0; font-family: var(--display); font-weight: 800; font-size: clamp(
     return li;
   }
 
+  // Heads the accounts X has no follow date for, where the two date orders put them.
+  const undatedHeading = { node: make('li', 'undated-head') };
+  undatedHeading.node.append(make('strong', null, 'No follow date'),
+    make('span', null, 'X puts these accounts at the top of its list, outside its date order, and gives no follow date for them, so they come last here.'));
+
   let shown = FIRST_ROWS;     // how many matching rows are on the page
-  let rendered = [];          // the accounts drawn, in order
+  let rendered = [];          // the rows drawn, in order: accounts, and the undated heading
   let matchCount = 0;
   let hiddenOpened = new Set();  // "Hide opened" hides what was opened when it was last applied, so rows don't vanish mid-click
 
@@ -650,6 +682,8 @@ h1 { margin: 0; font-family: var(--display); font-weight: 800; font-size: clamp(
     }
     const view = matching();
     const want = view.slice(0, shown);
+    const firstUndated = DATE_ORDERS.has(ui.sort.value) ? want.findIndex(a => a.undated) : -1;
+    if (firstUndated >= 0) want.splice(firstUndated, 0, undatedHeading);
     const extends_ = rendered.length <= want.length && rendered.every((a, i) => a === want[i]);
     const rows = document.createDocumentFragment();
     for (const a of extends_ ? want.slice(rendered.length) : want) rows.append(rowFor(a));
